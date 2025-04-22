@@ -32,16 +32,16 @@ def read_rplidar(lidar_port, baudrate=115200):
         try:
             print(f"[Info] Initializing RPLIDAR on {lidar_port} with baudrate {baudrate}...")
             lidar = RPLidar(lidar_port, baudrate=baudrate, timeout=1)
-            lidar.set_pwm(500)  # Slow motor speed to reduce data rate
+            lidar.set_pwm(500)  # Match standalone script's default motor speed
             print("[Info] RPLIDAR initialized. Health:", lidar.get_health())
-            for scan in lidar.iter_scans(max_buf_meas=300, min_len=5):
+            for scan in lidar.iter_scans():
                 scan_count += 1
                 min_distance = float('inf')
                 min_angle = 0
                 valid_points = 0
                 for scan_point in scan:
                     if len(scan_point) >= 3:
-                        _, angle, distance = scan_point[:3]
+                        _, angle, distance = scan_point[:3]  # Match standalone script
                         if -30 <= angle <= 30 and distance > 0:
                             valid_points += 1
                             distance_m = distance / 1000.0  # Convert mm to meters
@@ -54,9 +54,13 @@ def read_rplidar(lidar_port, baudrate=115200):
                     print(f"[RPLIDAR] Scan {scan_count}: Min Distance: {latest_distance:.2f} m at {latest_angle:.1f}° ({valid_points} valid points)")
                 else:
                     print(f"[RPLIDAR] Scan {scan_count}: No valid points in forward arc")
-                time.sleep(0.05)  # 50ms to clear buffer faster
+                time.sleep(0.1)  # Match standalone script's 100ms delay
+                # Clear serial buffer to prevent overflow
+                if lidar._serial.in_waiting > 1000:
+                    print(f"[Warning] High buffer load: {lidar._serial.in_waiting} bytes. Clearing...")
+                    lidar._serial.reset_input_buffer()
         except RPLidarException as e:
-            print(f"[RPLIDAR Error] {e}. Retrying in 5 seconds...")
+            print(f"[RPLIDAR Error] {e}. Buffer: {lidar._serial.in_waiting if lidar else 'N/A'} bytes. Retrying in 5 seconds...")
             if lidar:
                 try:
                     lidar.stop()
