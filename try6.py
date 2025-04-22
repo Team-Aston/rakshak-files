@@ -27,29 +27,34 @@ def read_ddsm_serial(ddsm_ser):
 def read_rplidar(lidar_port, baudrate=115200):
     global latest_distance, latest_angle
     lidar = None
+    scan_count = 0
     while True:
         try:
             print(f"[Info] Initializing RPLIDAR on {lidar_port} with baudrate {baudrate}...")
             lidar = RPLidar(lidar_port, baudrate=baudrate, timeout=1)
-            print("[Info] RPLIDAR initialized.")
-            for scan in lidar.iter_scans(max_buf_meas=500, min_len=5):
+            lidar.set_pwm(500)  # Slow motor speed to reduce data rate
+            print("[Info] RPLIDAR initialized. Health:", lidar.get_health())
+            for scan in lidar.iter_scans(max_buf_meas=300, min_len=5):
+                scan_count += 1
                 min_distance = float('inf')
                 min_angle = 0
+                valid_points = 0
                 for scan_point in scan:
                     if len(scan_point) >= 3:
-                        _, angle, distance = scan_point[:3]  # Unpack like the working script
-                        # Filter for forward-facing arc (±30 degrees around 0°)
-                        if -30 <= angle <= 30:
-                            if distance > 0:  # Ignore invalid measurements
-                                distance_m = distance / 1000.0  # Convert mm to meters
-                                if distance_m < min_distance:
-                                    min_distance = distance_m
-                                    min_angle = angle
-                if min_distance != float('inf'):
+                        _, angle, distance = scan_point[:3]
+                        if -30 <= angle <= 30 and distance > 0:
+                            valid_points += 1
+                            distance_m = distance / 1000.0  # Convert mm to meters
+                            if distance_m < min_distance:
+                                min_distance = distance_m
+                                min_angle = angle
+                if min_distance != float('inf') and valid_points > 0:
                     latest_distance = min_distance
                     latest_angle = min_angle
-                    print(f"[RPLIDAR] Min Distance: {latest_distance:.2f} m at {latest_angle:.1f}°")
-                time.sleep(0.1)  # 100ms delay to match working script
+                    print(f"[RPLIDAR] Scan {scan_count}: Min Distance: {latest_distance:.2f} m at {latest_angle:.1f}° ({valid_points} valid points)")
+                else:
+                    print(f"[RPLIDAR] Scan {scan_count}: No valid points in forward arc")
+                time.sleep(0.05)  # 50ms to clear buffer faster
         except RPLidarException as e:
             print(f"[RPLIDAR Error] {e}. Retrying in 5 seconds...")
             if lidar:
@@ -162,6 +167,7 @@ def main():
             # Send LIDAR distance data to Pixhawk
             if latest_distance != float('inf'):
                 send_distance_sensor(vehicle, latest_distance, latest_angle)
+                print(f"[Pixhawk] Sent DISTANCE_SENSOR: {latest_distance:.2f} m")
 
             time.sleep(0.1)  # Update at 10Hz
     except KeyboardInterrupt:
