@@ -3,11 +3,13 @@ import argparse
 import threading
 import json
 import time
+from pymavlink import mavutil
 from dronekit import connect
 from rplidar import RPLidar
 
-# Global variables to store the latest servo output values\latest_servo1_value = None
-latest_servo3_value = None
+# Global variables to store the latest servo output values
+latest_servo1_value = 0  # Initialize to 0 (default value)
+latest_servo3_value = 0  # Initialize to 0 (default value)
 
 # Directional mapping: (angle_range_low, angle_range_high), sensor_id, orientation
 DIRECTIONS = {
@@ -46,37 +48,45 @@ def lidar_loop(port, vehicle):
         print("[LIDAR] Started scanning...")
 
         for scan in lidar.iter_scans():
-            for direction, (angle_range, sensor_id, orientation) in DIRECTIONS.items():
+            for direction, (low, high) in DIRECTIONS.items():
                 distances = []
-                low, high = angle_range
-                for (_, angle, distance) in scan:
+                # Process each scan point
+                for _, angle, distance in scan:  # Correct unpacking here
                     # Handle wrapping for front-facing range
                     if low <= angle <= high:
                         if distance > 0:
                             distances.append(distance)
+
                 # Determine minimum distance or fallback
                 if distances:
                     min_dist = min(distances)
                 else:
-                    min_dist = 1000
-                # Clamp to Pixhawk-compatible range (cm)
+                    min_dist = 1000  # If no valid distance is found, default to 1000 cm (far away)
+
+                # Clamp to Pixhawk-compatible range (in cm)
                 cm = max(20, min(1000, int(min_dist)))
-                # Send MAVLink distance_sensor message
-                vehicle.message_factory.distance_sensor_send(
-                    int(time.time() * 1000),  # time_boot_ms
+
+                # Send MAVLink DISTANCE_SENSOR message
+                vehicle.mav.distance_sensor_send(
+                    int(time.time() * 1000),  # time_boot_ms (current time in milliseconds)
                     20,    # min_distance (cm)
                     1000,  # max_distance (cm)
                     cm,    # current_distance (cm)
                     0,     # sensor type: 0 = LASER
-                    sensor_id,
-                    orientation,
+                    1,     # sensor ID (you can change this as needed)
+                    0,     # orientation: 0 = forward-facing (you can adjust for other directions)
                     0      # covariance
                 )
                 print(f"[LIDAR -> Pixhawk] {direction.capitalize()}: {cm} cm")
 
-            time.sleep(0.1)
+            time.sleep(0.1)  # Add a small delay to prevent buffer overflow
     except Exception as e:
         print(f"[LIDAR Error] {e}")
+    finally:
+        lidar.stop()
+        lidar.disconnect()
+        print("[INFO] LIDAR stopped and disconnected.")
+
 
 
 def main():
@@ -86,8 +96,8 @@ def main():
     parser.add_argument('ddsm_port', type=str, help='Serial port for DDSM HAT (e.g., /dev/ttyUSB0)')
     parser.add_argument('--pixhawk', type=str, default='/dev/ttyAMA0',
                         help='MAVLink port for Pixhawk (e.g., /dev/ttyAMA0)')
-    parser.add_argument('--lidar_port', type=str, default='/dev/ttyUSB1',
-                        help='Serial port for RPLIDAR (e.g., /dev/ttyUSB1)')
+    parser.add_argument('--lidar_port', type=str, default='/dev/ttyUSB0',
+                        help='Serial port for RPLIDAR (e.g., /dev/ttyUSB0)')
     args = parser.parse_args()
 
     # Connect to DDSM serial
