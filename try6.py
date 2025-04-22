@@ -32,9 +32,9 @@ def read_rplidar(lidar_port, baudrate=115200):
         try:
             print(f"[Info] Initializing RPLIDAR on {lidar_port} with baudrate {baudrate}...")
             lidar = RPLidar(lidar_port, baudrate=baudrate, timeout=1)
-            lidar.set_pwm(500)  # Match standalone script's default motor speed
             print("[Info] RPLIDAR initialized. Health:", lidar.get_health())
-            for scan in lidar.iter_scans():
+            print("[Info] RPLIDAR Info:", lidar.get_info())
+            for scan in lidar.iter_scans(max_buf_meas=500, min_len=5):
                 scan_count += 1
                 min_distance = float('inf')
                 min_angle = 0
@@ -123,7 +123,7 @@ def main():
 
     # Connect to Pixhawk
     print("[Info] Connecting to Pixhawk...")
-    vehicle = connect(args.pixhawk, wait_ready=True, baud=57600)
+    vehicle = connect(args.pixhawk, wait_clear=True, baud=57600)
     print("[Info] Connected to Pixhawk.")
 
     # Define the servo output listener
