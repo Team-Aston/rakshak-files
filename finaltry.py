@@ -27,7 +27,7 @@ def scale_servo_to_speed(servo_value):
     if servo_value is None:
         return 0
     # Maps servo_value (1000-2000 µs) to -100 to 100, centered around 1735
-    return int((servo_value - 1735) / 500 * 100)
+    return int((servo_value - 1500) / 500 * 100)
 
 def process_scan(scan):
     """Process LiDAR scan to determine if front, left, or right sectors are clear."""
