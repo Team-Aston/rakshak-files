@@ -67,7 +67,7 @@ def main():
     # Define waypoints (replace with your coordinates)
     waypoints = [
         LocationGlobalRelative(17.3970892, 78.4901811, 0),
-        LocationGlobalRelative(37.7750, -122.4195, 0),
+        LocationGlobalRelative(17.3969139, 78.4902643, 0),
     ]
 
     try:
